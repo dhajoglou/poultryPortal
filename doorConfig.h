@@ -1,3 +1,5 @@
+
+
 /**
  * General configuration stuff.
  *
@@ -10,6 +12,10 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <Preferences.h>
+#include <ESPAsyncWebServer.h>
+#include <SPIFFS.h>
+
+
 #define TIMER_INTERRUPT_DEBUG       1
 #include "ESP32TimerInterrupt.h"
 #define WIFI_TIMER_TIMEOUT_MS       5000 /* 5 seconds */
@@ -69,8 +75,8 @@ const char* ntpPool = "pool.ntp.org";
 #define TFT_CLK   5
 #define TFT_MOSI  18
 #define TFT_MISO  19
-#define TFT_DC    16
-#define TFT_CS    17
+#define TFT_DC    17
+#define TFT_CS    16
 /* last pin on the long side */
 #define ENC_BTN   21
 
@@ -86,7 +92,7 @@ const char* ntpPool = "pool.ntp.org";
 #define UNUSED_SDA  23 //i2c bus
 
 /*
- * The open/close times is hels in this struct
+ * The open/close times is held in this struct
  * It's easy to simply define and hour/minute combo for each time
  */
 typedef struct

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Update Wifi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <script>
+	window.onload=function(){
+	  document.getElementById("svBtn").style.display='none';
+
+	}
+	function showButton(){
+	  document.getElementById("svBtn").style.display='inline';
+	}
+</script>
+</head>
+<body>
+  <h1>Update Wifi</h1>
+  <form action="/saveWifi" method="get" id="wifiForm">
+  <p>Wifi Network: <input name="wifissid" value=%WIFI_SSID% type="text" onkeyup="showButton()"> 
+  Wifi Password: <input name="wifipass" value=%WIFI_PASS% type="text"  onkeyup="showButton()">
+  </p>
+  <button class="button" id="svBtn" type="submit">Save/Restart</button>
+  </form>
+  
+<p>Return to main
+<a href="/settings"><button class="button">Return</button></a>
+</p>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Update Schedule</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+  <h1>Update Schedulete</h1>
+  
+  <p>Current Time: <strong> %TOD%</strong></p>
+  <p>Door is currently <strong>%STATE%</strong></p>
+  <p>Door Schedule</p>
+  <ul>
+      <li>Open @:<input type="text" value=%OTIME% name="uotime"> <a href="/saveOpen"><button class="button">Update</button></a></li>
+      <li>Open @:<input type="text" value=%CTIME% name="uctime"> <a href="/saveClose"><button class="button">Update</button></a></li>
+  </ul>
+<br>
+
+<p>Return to main
+<a href="/"><button class="button">Return</button></a>
+</p>
+</body>
+</html>
