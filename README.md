@@ -21,6 +21,4 @@ Version from Arduino Library Manager
 Version from Arduino LIbrary Manager
 ## Adafruit ILI9341
 Version from Arduino Library Manager (and all required dependencies)
-## Prefs
-## SPIFFS
 
