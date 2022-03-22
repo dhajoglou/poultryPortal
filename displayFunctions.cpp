@@ -62,7 +62,7 @@ int defaultScreen(Adafruit_ILI9341& tft, String bChg, String dPos, String dState
   printTft(tft, stateRow, -1, -0, ILI9341_GREEN, 2, true);
   printTft(tft, nextRow, -1, -0, ILI9341_GREEN, 2, true);
   printPeep(tft);
-  return DEFAULTSCREEN;
+  return DEFAULT_SCREEN;
 }
 
 void updatDefTime(Adafruit_ILI9341& tft, String fTime) {

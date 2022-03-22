@@ -9,7 +9,9 @@ boolean LDRMODE = false;
 //WiFiServer server(80);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, ntpPool);
-String prevTime;
+String prevTime; //clock variable for showing each second
+int32_t utcOffset;
+
 
 /* webserver and spifs stuff */
 AsyncWebServer server(80);
@@ -17,20 +19,20 @@ AsyncWebServer server(80);
 
 /* display and encoder */
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC); //Use hardware SPI and specify the chip selet and data command pins
-uint8_t CURRENTSCREEN = 0;
-//ClickEncoder *encoder;
-//ClickEncoder encoder = ClickEncoder(ENC_A, ENC_B, ENC_BTN, ENCODER_STEPS_PER_NOTCH);
 ESP32Encoder encoder;
+InputDebounce encoder_btn;
 int16_t lastEncoderValue = 0;
 int16_t currentEncoderValue;
+unsigned long encoderWaitBuffer; //after we turn the encoder, pause .25 seconds
+uint8_t CURRENTSCREEN = 0;
 
 
 Preferences prefs;
 timeTrigger schedule;
 
 /*
- * Door Control variables
- */
+   Door Control variables
+*/
 volatile int doorState = D_CRACKED; //default presumtpin that the door is not actually closed
 volatile int motorState = M_UNKNOWN;
 
@@ -38,15 +40,21 @@ volatile int motorState = M_UNKNOWN;
 
 void setup() {
   prefs.begin("cdoor", false);
-  prefs.putInt(pUtcOffset,-6);
-  //seed values.
-  //prefs.putString("wifi-ssid","wm-core");
-  //prefs.putString("wifi-password","cheerleader");
 
-  time_t t = prefs.getULong("lastBoot", 0);
+  
+
+  // Check to see if we are brand new based on if the offset is actually set. Otherwise, set the offset and continue:
+  if ((utcOffset = prefs.getInt(pUtcOffset, 50)) == 50) {
+    //seed the offset with 0 and tell everyone else
+    utcOffset = 0;
+    prefs.putInt(pUtcOffset, 0);
+    prefs.putULong(pLastBoot, 0);
+  }
+
+  time_t t = prefs.getULong(pLastBoot);
   char lastSeen[20];
   strftime(lastSeen, 20, "%Y-%m-%d %H:%M:%S", localtime(&t));
-  
+
 
   Serial.begin(115200);
   //delay(1000);
@@ -69,14 +77,25 @@ void setup() {
     prefs.putULong("lastBoot", t);
     loadSchedule();
     setupWebServer();
-    
+
   }
   clearDisp(tft);
 
-  ESP32Encoder::useInternalWeakPullResistors=UP;
+  ESP32Encoder::useInternalWeakPullResistors = UP;
   encoder.attachHalfQuad(ENC_A, ENC_B);
+  encoder_btn.registerCallbacks(encPressCallback, encReleaseCallback, NULL, NULL);
+  encoder_btn.setup(ENC_BTN, BUTTON_DEBOUNCE_DELAY, InputDebounce::PIM_INT_PULL_UP_RES, 100);
+  
   //encoder.setCount(0);
 }
+
+void encPressCallback(uint8_t pinIn){
+  Serial.println("enc pressed");
+}
+void encReleaseCallback(uint8_t pinIn){
+  
+}
+
 
 
 
@@ -84,16 +103,16 @@ void setup() {
 void loop() {
 
   /*
-   * General Loop opearation
-   * First, check the current sensor
-   * Second, check the door state
-   * Third, check for any API/UI calls
-   * Fourth, check the schedule or, LDR values if we're not in wifi
-   * Fifth, check the rotary encoder for menu actions
-   * Sixth, update the display
-   * Seventh, check for time updates
-   * Eight, update temp/battery data
-   */
+     General Loop opearation
+     First, check the current sensor
+     Second, check the door state
+     Third, check for any API/UI calls
+     Fourth, check the schedule or, LDR values if we're not in wifi
+     Fifth, check the rotary encoder for menu actions
+     Sixth, update the display
+     Seventh, check for time updates
+     Eight, update temp/battery data
+  */
   // put your main code here, to run repeatedly:
   //delay(1000);
   //getTemp();
@@ -109,7 +128,7 @@ void loop() {
   if (!LDRMODE) {
     fTime = timeClient.getFormattedTime();
     //if door is open, lookup close time. else, lookup open time:
-    sprintf(nextAction,"Open at %02d:%02dh", schedule.openHour, schedule.openMin);
+    sprintf(nextAction, "Open at %02d:%02dh", schedule.openHour, schedule.openMin);
   }
 
   //check to see if we switched screens
@@ -120,7 +139,16 @@ void loop() {
     lastEncoderValue = currentEncoderValue;
     //set new display screen
   }
-  if (CURRENTSCREEN == DEFAULTSCREEN) {
+
+  switch (CURRENTSCREEN) {
+    case DEFAULT_SCREEN:
+      defaultScreen(tft, battCharge, dPosition, dState, fTime, nextAction);
+      break;
+    case CONTROL_DOOR_SCREEN:
+      break;
+  }
+  /*
+  if (CURRENTSCREEN == DEFAULT_SCREEN) {
     //only update once per second
     if (!fTime.equals(prevTime)) {
       updatDefTime(tft, fTime);
@@ -129,6 +157,9 @@ void loop() {
   } else if (CURRENTSCREEN < 1)  {
     CURRENTSCREEN = defaultScreen(tft, battCharge, dPosition, dState, fTime, nextAction);
   }
+  */
+
+  doorStateUpdate();
 
 }
 
@@ -136,18 +167,13 @@ volatile boolean stopWifiConn = false;
 void IRAM_ATTR wifiSetupTimerHandler0(void)
 {
   stopWifiConn = true;
-#if (TIMER_INTERRUPT_DEBUG > 0)
-  //REALLY BAD TO SERIAL.PRINLN IN A TIMER HANDLER. JUST SO YOU KNOW
-  Serial.println("wifiSetupTimerHandler0: millis() = " + String(millis()));
-#endif
-
 }
 
 boolean setupWifi() {
   boolean connected = false;
-  String ssid = prefs.getString(pWifiSsid,"");
-  String pass = prefs.getString(pWifiPass,"");
-  
+  String ssid = prefs.getString(pWifiSsid, "");
+  String pass = prefs.getString(pWifiPass, "");
+
   uint8_t wifiAttempts = 0;
   while (wifiAttempts < WIFI_RETRY && !connected) {
     wifiAttempts++;
@@ -163,7 +189,7 @@ boolean setupWifi() {
     char wifiMsgs[100];
     sprintf(wifiMsgs, "Connecting to %s (%d)", ssid, wifiAttempts);
     printTftSimple(tft, wifiMsgs, true);
-    WiFi.begin(ssid.c_str(),pass.c_str());
+    WiFi.begin(ssid.c_str(), pass.c_str());
     while (WiFi.status() != WL_CONNECTED && !stopWifiConn) {
       delay(500);
       printTftSimple(tft, ".", false);
@@ -184,7 +210,7 @@ boolean setupWifi() {
     }
   }
   if (connected) {
-    int32_t utcOffset = prefs.getInt(pUtcOffset,-6);
+    //utcOffset = prefs.getInt(pUtcOffset, -6);
     timeClient.setTimeOffset(SECONDS_PER_HOUR * utcOffset);
     timeClient.setUpdateInterval(NTP_UPDATE_INTERVAL);
     timeClient.begin();
@@ -216,6 +242,7 @@ void setupPins() {
   digitalWrite(RELAY_6, HIGH);
   pinMode(RELAY_7, OUTPUT);
   digitalWrite(RELAY_7, HIGH);
+  pinMode(ENC_BTN,INPUT);
 }
 
 void setupTft() {
@@ -239,30 +266,31 @@ float getTemp() {
 float getLDR() {
   int ldr = analogRead(LDR);
   Serial.println(ldr);
+  return 0.0;
 }
 
 void loadSchedule() {
   int openHour = prefs.getChar("oHour", -1);
-  int openMinute = prefs.getChar("oMin",-1);
+  int openMinute = prefs.getChar("oMin", -1);
   int closeHour = prefs.getChar("cHour", -1);
-  int closeMinute = prefs.getChar("cMin",-1);
-  
-  if (openHour < 0){
+  int closeMinute = prefs.getChar("cMin", -1);
+
+  if (openHour < 0) {
     schedule.openHour = 8;
     schedule.openMin = 0;
-    prefs.putChar("oHour",schedule.openHour);
-    prefs.putChar("oMin",schedule.openMin);
-    
-  } else {
+    prefs.putChar("oHour", schedule.openHour);
+    prefs.putChar("oMin", schedule.openMin);
+
+  }  else {
     schedule.openHour = openHour;
     schedule.openMin = openMinute;
   }
 
-  if (closeHour < 0){
+  if (closeHour < 0) {
     schedule.closeHour = 20;
     schedule.closeMin = 0;
-    prefs.putChar("cHour",schedule.closeHour);
-    prefs.putChar("cMin",schedule.closeMin); 
+    prefs.putChar("cHour", schedule.closeHour);
+    prefs.putChar("cMin", schedule.closeMin);
   } else {
     schedule.closeHour = closeHour;
     schedule.closeMin = closeMinute;
@@ -270,11 +298,28 @@ void loadSchedule() {
 }
 
 /*
- * The following is the open/close/state api and logic for the door controler
- */
+   Called from the rest API.  Update the hour and minute of the schedule
+*/
+void updateSchedule(int h, int m, int SCH) {
+  switch (SCH) {
+    case OSCH:
+      prefs.putChar("oHour", h);
+      prefs.putChar("oMin", m);
+      break;
+    case CSCH:
+      prefs.putChar("cHour", h);
+      prefs.putChar("cMin", m);
+      break;
+  }
+  loadSchedule();
+}
+
+/*
+   The following is the open/close/state api and logic for the door controler
+*/
 
 /**
-   These API calls can be issued via the webapp, scheduler, or the 
+   These API calls can be issued via the webapp, scheduler, or the
    controls on the door itself.
 */
 void stopMotorApi() {
@@ -282,16 +327,23 @@ void stopMotorApi() {
   digitalWrite(RELAY_3_4, HIGH);
 }
 void closeDoorApi() {
+  doorStateUpdate();
+  if (doorState == D_CLOSED) {
+    return;
+  }
   digitalWrite(RELAY_1_2, LOW);
   digitalWrite(RELAY_3_4, HIGH);
 }
 void openDoorApi() {
-  //if all goes well, issue command
+  doorStateUpdate();
+  if (doorState == D_OPENED) {
+    return;
+  }
   digitalWrite(RELAY_1_2, HIGH);
   digitalWrite(RELAY_3_4, LOW);
 }
 
-void doorStateApi() {
+void doorStateUpdate() {
 
   //first check the fault state if both switches are closed/disconnected
   if ( !(digitalRead(B_LIM_SW) && digitalRead(T_LIM_SW)) ) {
@@ -329,17 +381,56 @@ void doorStateApi() {
     //anyting that's not fully open is "cracked"
     doorState = D_CRACKED;
   }
+
+  doorState = D_OPENED; //debug
 }
 
 
-String processor(const String& var){
+String processor(const String& var) {
   Serial.println(var);
 
-  if(var == "WIFI_PASS"){
+  if (var == "WIFI_PASS") {
     return "12345";
   }
-  if(var == "WIFI_SSID"){
+  if (var == "WIFI_SSID") {
     return "hotspot";
   }
+  if (var == "TOD") {
+    return timeClient.getFormattedTime();
+  }
+  if (var == "OTIME") {
+    char openTime[10];
+    sprintf(openTime, "%02d:%02dh", schedule.openHour, schedule.openMin);
+    return String(openTime);
+  }
+  if (var == "CTIME") {
+    char closeTime[10];
+    sprintf(closeTime, "%02d:%02dh", schedule.closeHour, schedule.closeMin);
+    return String(closeTime);
+  }
+  if (var == "STATE") {
+    doorStateUpdate();
+    switch (doorState) {
+      case D_OPENED:
+        return "Opened";
+      case D_CLOSED:
+        return "Closed";
+      default:
+        return "UNKNOWN";
+    }
+  }
+  if (var == "TOFFSET") {
+    return String(utcOffset);
+  }
+
   return String();
+}
+
+/**
+   add 1 or -1 to the offset.  Save it in prefs and update the timeClient.
+*/
+void updateTime(int i) {
+  utcOffset += i;
+  timeClient.setTimeOffset(SECONDS_PER_HOUR * utcOffset);
+  prefs.putInt(pUtcOffset, utcOffset);
 }

@@ -4,7 +4,14 @@ html {
   margin: 0px auto;
   text-align: left;
 }
-h1{
+h1center {
+  font-size: 3.0rem;
+  color: #ff0088;
+  padding: 2vh;
+  text-align: center;
+}
+h2center {
+  font-size: 1.0rem;
   color: #ff0088;
   padding: 2vh;
   text-align: center;

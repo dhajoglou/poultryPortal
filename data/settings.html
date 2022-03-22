@@ -8,20 +8,18 @@
 </head>
 <body>
   <h1>Settings CHECK FOR RESTART</h1>
-  
+
   <p>Current Time: <strong> %TOD%</strong></p>
-  <p>Time Zone Offset: <strong> %TOFFSET%</strong><a href="/spring"><button class="button">Increment</button></a>
-  <a href="/fall"><button class="button">Decrement</button></a></p>
-  
-  <p>Wifi Network: <input name="wifissid" value=%WIFI_SSID% type="text"> 
+
+  <p>Wifi Network: <input name="wifissid" value=%WIFI_SSID% type="text">
   Wifi Password: <input name="wifipass" value=%WIFI_PASS% type="text">
  <a href="/newWifi"><button class="button">Change</button></a>
  </p>
-  
+
   <p>Noification Email: <input name="nofify" value=%EMAIL% type="text"> <a href="/notifyEmail"><button class="button">Update</button></a>
   </p>
-  
-  <p>Noification Mode: 
+
+  <p>Noification Mode:
   <select name="nofifyMode">
       <option name="all" value="3">All Messages (noisy)
       </option>
@@ -31,7 +29,7 @@
   </select>
   <a href="/notifyEmailMode"><button class="button">Update</button></a>
   </p>
-  
+
 <p>Return to main
 <a href="/"><button class="button">Return</button></a>
 </p>

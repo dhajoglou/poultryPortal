@@ -5,23 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" type="text/css" href="style.css">
+  <meta http-equiv="refresh" content="5">
+
+
+  <script type="text/javascript">
+    function changeDoor(oc,id) {
+      //very simple call to the open/close API. The auto refresh above will update the status after any calls
+      document.getElementById(id).style.backgroundColor="#555555";
+        var xhr = new XMLHttpRequest();
+        xhr.open('get', '/' + oc, true);
+        xhr.send();
+    }
+  </script>
 </head>
 <body>
-  <h1>Chicken Door Status//addin a requery ever 5 seconds</h1>
+  <h1center>Chicken Door Status</h1center>
+  <br>
+  <h2center>This page will refresh every 5 seconds</h2center>
+
 
   <p>Current Time: <strong> %TOD%</strong></p>
   <p>Door is currently <strong>%STATE%</strong></p>
-  <p>Trigger door <a href="/open"><button class="button">Open</button></a>  or <a href="/close"><button class="button button2">Close</button></a>.
-  
+  <p>Trigger door <button class="button" id="oB" onclick="changeDoor('open',this.id)"> Open</button> or <button class="button" id="cB" onclick="changeDoor('close',this.id)">Close</button>.
+
 </p>
   <p>Door Schedule <a href="/update"><button class="button">Change</button></a></p>
   <ul>
-      <li>Open @:<strong>%OTIME%</strong></li>
-      <li>Close @:<strong>%CTIME%</strong></li>
+      <li>Open @ <strong>%OTIME%</strong></li>
+      <li>Close @ <strong>%CTIME%</strong></li>
   </ul>
 
 <p>
-<a href="/settings"><button class="button">Update Settings</button></a>
+<!--
+Disable settings for now
+<a href="/settings"><button class="button">Update Settings</button></a> -->
 </p>
 </body>
 </html>

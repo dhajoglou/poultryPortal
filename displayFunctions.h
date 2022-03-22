@@ -1,6 +1,10 @@
 #include <Adafruit_ILI9341.h>
 #include <Adafruit_GFX.h>
-#define DEFAULTSCREEN 1
+/*
+ * TFT Screens 
+ */
+#define DEFAULT_SCREEN 0
+#define CONTROL_DOOR_SCREEN 1
 
 //Strings
 const String startMsg = "Starting Poultry Portal...";

@@ -1,4 +1,6 @@
-
+boolean setupApMode(){
+  
+}
 
 boolean setupWebServer() {
 
@@ -18,10 +20,12 @@ boolean setupWebServer() {
     request->send(SPIFFS, "/index.html", String(), false, processor);
   });
   server.on("/open", HTTP_GET, [](AsyncWebServerRequest * request) { //call the door open routine;
-    request->send(SPIFFS, "/index.html", String(), false, processor);
+    request->send(200, "text/plain", "Open Initiated");
+    openDoorApi();
   });
   server.on("/close", HTTP_GET, [](AsyncWebServerRequest * request) { //call the door close routine;
-    request->send(SPIFFS, "/index.html", String(), false, processor);
+    request->send(200, "text/plain", "Close Initiated");
+    closeDoorApi();
   });
   server.on("/update", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(SPIFFS, "/update.html", String(), false, processor);
@@ -30,26 +34,52 @@ boolean setupWebServer() {
     request->send(SPIFFS, "/settings.html", String(), false, processor);
   });
 
-  //post?
+/*
+ * Presume that the inputs are validated from the javascript for save open/close.
+ * /saveOpen and /saveClose are nearly identical and can be refactored at some point
+ */
   server.on("/saveClose", HTTP_GET, [](AsyncWebServerRequest * request) { //call close schedule save;
+    const char* HOUR = "h";
+    const char* MIN = "m";
+    String newHour = "";
+    String newMin = "";
+    Serial.println("Updating open schedule");
+    if (request->hasParam(HOUR) && request->hasParam(MIN)) {
+      newHour = request->getParam(HOUR)->value();
+      newMin = request->getParam(MIN)->value();
+      updateSchedule(newHour.toInt(),newMin.toInt(),CSCH);
+    }
+    request->send(SPIFFS, "/update.html", String(), false, processor);
+  });
+  
+  server.on("/saveOpen", HTTP_GET, [](AsyncWebServerRequest * request) { //call open schedule save;
+    const char* HOUR = "h";
+    const char* MIN = "m";
+    String newHour = "";
+    String newMin = "";
+    Serial.println("Updating open schedule");
+    if (request->hasParam(HOUR) && request->hasParam(MIN)) {
+      newHour = request->getParam(HOUR)->value();
+      newMin = request->getParam(MIN)->value();
+      updateSchedule(newHour.toInt(),newMin.toInt(),OSCH);
+    }
     request->send(SPIFFS, "/update.html", String(), false, processor);
   });
 
-  server.on("/saveOpen", HTTP_GET, [](AsyncWebServerRequest * request) { //call open schedule save;
-    request->send(SPIFFS, "/update.html", String(), false, processor);
-  });
+
 
   server.on("/spring", HTTP_GET, [](AsyncWebServerRequest * request) { //update offset +1
-    request->send(SPIFFS, "/settings.html", String(), false, processor);
+   updateTime(1);
+    request->send(SPIFFS, "/update.html", String(), false, processor);
   });
 
   server.on("/fall", HTTP_GET, [](AsyncWebServerRequest * request) { //update offset -1
-    request->send(SPIFFS, "/settings.html", String(), false, processor);
+    updateTime(-1);
+    request->send(SPIFFS, "/update.html", String(), false, processor);
   });
   server.on("/newWifi", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(SPIFFS, "/newWifi.html", String(), false, processor);
   });
-
 
   server.on("/saveWifi", HTTP_GET, [](AsyncWebServerRequest * request) {
     const char* WSID = "wifissid";

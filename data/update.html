@@ -5,21 +5,72 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" type="text/css" href="style.css">
+
+  <script>
+  function updateSchedule(schTime,api) {
+    var newTime = document.getElementById(schTime).value;
+    const timeParts = newTime.split(":");
+    var errorReason = "";
+    if(timeParts.length === 2){
+      var hour = timeParts[0];
+      var minute = timeParts[1].replace("h","");
+
+      if(hour >=0 && hour <=23 && minute >=0 && minute <=59 ) {
+        var form = document.createElement("form");
+        form.method = "GET";
+        form.action = api;
+
+        var iHour = document.createElement("input");
+        iHour.setAttribute("type", "hidden");
+        iHour.name = "h";
+        iHour.value = hour;
+        form.appendChild(iHour);
+
+        var iMin = document.createElement("input");
+        iMin.setAttribute("type", "hidden");
+        iMin.name = "m";
+        iMin.value = minute;
+        form.appendChild(iMin);
+        document.body.appendChild(form);
+      } else {
+        errorReason = "Invalid time. Please specify between 0 and 23 hrs (current: " + hour
+        + ") and between 0 and 59 minutes (current: " + minute + ")";
+      }
+    } else {
+      errorReason = "Time format does not fit hh:mm format. Current value: " + newTime;
+    }
+    if (errorReason.length > 0){
+      alert(errorReason);
+    } else {
+      form.submit();
+      location.refresh();
+    }
+  }
+  </script>
 </head>
 <body>
   <h1>Update Schedulete</h1>
-  
-  <p>Current Time: <strong> %TOD%</strong></p>
-  <p>Door is currently <strong>%STATE%</strong></p>
-  <p>Door Schedule</p>
-  <ul>
-      <li>Open @:<input type="text" value=%OTIME% name="uotime"> <a href="/saveOpen"><button class="button">Update</button></a></li>
-      <li>Open @:<input type="text" value=%CTIME% name="uctime"> <a href="/saveClose"><button class="button">Update</button></a></li>
-  </ul>
-<br>
 
-<p>Return to main
-<a href="/"><button class="button">Return</button></a>
-</p>
+  <p>Current Time: <strong> %TOD%</strong></p>
+  <p>Time Zone Offset: <strong> %TOFFSET%</strong><a href="/spring"><button class="button">Increment</button></a>
+  <a href="/fall"><button class="button">Decrement</button></a></p>
+  
+  <p>Door is currently <strong>%STATE%</strong></p>
+  <p>Door Schedule (times are in 24h. i.e. 8pm = 20:00h)</p>
+  <ul>
+
+    <li>
+        Open @:<input type="text" value=%OTIME% id="schOTime"> <button class="button" onclick='updateSchedule("schOTime","/saveOpen")'>Update</button>
+    </li>
+    <li>
+        Open @:<input type="text" value=%CTIME% id="schCTime"> <button class="button" onclick='updateSchedule("schCTime","/saveClose")'>Update</button>
+    </li>
+
+  </ul>
+  <br>
+
+  <p>Return to main
+    <a href="/"><button class="button">Return</button></a>
+  </p>
 </body>
 </html>

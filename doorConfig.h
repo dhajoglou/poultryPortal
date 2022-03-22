@@ -1,5 +1,3 @@
-
-
 /**
  * General configuration stuff.
  *
@@ -14,15 +12,23 @@
 #include <Preferences.h>
 #include <ESPAsyncWebServer.h>
 #include <SPIFFS.h>
+#include <WiFiManager.h>
+#include <InputDebounce.h>
+
+
+
+
 
 
 #define TIMER_INTERRUPT_DEBUG       1
-#include "ESP32TimerInterrupt.h"
+#include <ESP32TimerInterrupt.h>
+#include <ESP32TimerInterrupt.hpp>
 #define WIFI_TIMER_TIMEOUT_MS       5000 /* 5 seconds */
 #define NTP_UPDATE_INTERVAL         86400000L
 #define WIFI_RETRY                   3
 #define DEBUG_NTPClient             1
 #define ENCODER_STEPS_PER_NOTCH     1
+#define BUTTON_DEBOUNCE_DELAY       20 /* delay for debouncing encoder push */
 #define SECONDS_PER_HOUR            3600
 /*
  * Preferences keys and constants
@@ -30,6 +36,7 @@
 const char* pWifiSsid = "wifi-ssid";
 const char* pWifiPass = "wifi-password";
 const char* pUtcOffset = "utcOffset";
+const char* pLastBoot = "lastBoot";
 const char* ntpPool = "pool.ntp.org";
 
 /**
@@ -102,3 +109,6 @@ typedef struct
   char closeHour;
   char closeMin;
 } timeTrigger;
+#define OSCH 1
+#define CSCH 2
+ 
