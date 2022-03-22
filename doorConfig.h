@@ -12,7 +12,7 @@
 #include <Preferences.h>
 #include <ESPAsyncWebServer.h>
 #include <SPIFFS.h>
-#include <WiFiManager.h>
+
 #include <InputDebounce.h>
 
 
@@ -22,7 +22,6 @@
 
 #define TIMER_INTERRUPT_DEBUG       1
 #include <ESP32TimerInterrupt.h>
-#include <ESP32TimerInterrupt.hpp>
 #define WIFI_TIMER_TIMEOUT_MS       5000 /* 5 seconds */
 #define NTP_UPDATE_INTERVAL         86400000L
 #define WIFI_RETRY                   3

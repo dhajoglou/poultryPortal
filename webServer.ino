@@ -1,6 +1,4 @@
-boolean setupApMode(){
-  
-}
+
 
 boolean setupWebServer() {
 
