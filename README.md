@@ -18,7 +18,9 @@ Requred by WebServer: https://github.com/me-no-dev/AsyncTCP
 ## NTPClient
 Version from Arduino Library Manager
 ## ESP32Encoder
-Version from Arduino LIbrary Manager
+Version from Arduino Library Manager
+## Esp32TimerInterrupt
+Version from Library Manager (by Khoih)
 ## Adafruit ILI9341
 Version from Arduino Library Manager (and all required dependencies)
 
