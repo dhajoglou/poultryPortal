@@ -18,13 +18,16 @@ AsyncWebServer server(80);
 
 
 /* display and encoder */
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC); //Use hardware SPI and specify the chip selet and data command pins
+//Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC); //Use hardware SPI and specify the chip selet and data command pins
+DisplayModule disp = DisplayModule(TFT_CS, TFT_DC, -1);
 ESP32Encoder encoder;
 InputDebounce encoder_btn;
 int16_t lastEncoderValue = 0;
 int16_t currentEncoderValue;
 unsigned long encoderWaitBuffer; //after we turn the encoder, pause .25 seconds
 uint8_t CURRENTSCREEN = 0;
+uint8_t PREVIOUS_SCREE = 0;
+unsigned long buttonMillis;
 
 
 Preferences prefs;
@@ -59,16 +62,16 @@ void setup() {
   Serial.begin(115200);
   //delay(1000);
   setupPins();
-  setupTft();
-  printStartMsg(tft);
-  printTftSimple(tft, "Last Boott: ", true);
-  printTftSimple(tft, lastSeen, true);
+  disp.startDisp();
+  disp.printStartMsg();
+  disp.printTftSimple("Last Boot: ", true);
+  disp.printTftSimple(lastSeen, true);
   if (!setupWifi()) {
     //error that time isn't set
-    clearDisp(tft);
-    printWifiFail(tft);
+    disp.clearDisp();
+    disp.printWifiFail();
     delay(2000);
-    printLdrMode(tft);
+    disp.printLdrMode();
     LDRMODE = true;
     ntpUDP.stop();
     WiFi.mode(WIFI_OFF);
@@ -79,7 +82,7 @@ void setup() {
     setupWebServer();
 
   }
-  clearDisp(tft);
+  disp.clearDisp();
 
   ESP32Encoder::useInternalWeakPullResistors = UP;
   encoder.attachHalfQuad(ENC_A, ENC_B);
@@ -136,15 +139,29 @@ void loop() {
   if (currentEncoderValue != lastEncoderValue) {
     Serial.print("NEW ENC VAL: ");
     Serial.println(currentEncoderValue);
+
+    if (currentEncoderValue > lastEncoderValue){
+      CURRENTSCREEN++;
+    } else{
+      CURRENTSCREEN--;
+    }
     lastEncoderValue = currentEncoderValue;
     //set new display screen
+    
+    disp.setPeepBuffer(CURRENTSCREEN);
   }
+  buttonMillis = millis();
+  encoder_btn.process(buttonMillis);
 
   switch (CURRENTSCREEN) {
     case DEFAULT_SCREEN:
-      defaultScreen(tft, battCharge, dPosition, dState, fTime, nextAction);
+      if (!fTime.equals(prevTime)) {
+        prevTime = fTime;
+        disp.defaultScreen(battCharge, dPosition, dState, fTime, nextAction);
+      }
       break;
     case CONTROL_DOOR_SCREEN:
+      disp.printPeep();
       break;
   }
   /*
@@ -185,14 +202,14 @@ boolean setupWifi() {
       Serial.println(F("Can't set WIFI WATCH/ITimer0. Select another freq. or timer"));
       return false;
     }
-    printWifiStart(tft);
+    disp.printWifiStart();
     char wifiMsgs[100];
     sprintf(wifiMsgs, "Connecting to %s (%d)", ssid, wifiAttempts);
-    printTftSimple(tft, wifiMsgs, true);
+    disp.printTftSimple(wifiMsgs, true);
     WiFi.begin(ssid.c_str(), pass.c_str());
     while (WiFi.status() != WL_CONNECTED && !stopWifiConn) {
       delay(500);
-      printTftSimple(tft, ".", false);
+      disp.printTftSimple(".", false);
     }
     //stop the watchdog
     ITimer0.stopTimer();
@@ -202,7 +219,7 @@ boolean setupWifi() {
       connected = false;
     } else {
       sprintf(wifiMsgs, "\nWifi Connected\nIP Address:%s", WiFi.localIP().toString().c_str());
-      printTft(tft, wifiMsgs, -1, 0, ILI9341_GREEN, 2, true);
+      disp.printTft(wifiMsgs, -1, 0, ILI9341_GREEN, 2, true);
       connected =  true;
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
@@ -215,7 +232,7 @@ boolean setupWifi() {
     timeClient.setUpdateInterval(NTP_UPDATE_INTERVAL);
     timeClient.begin();
     timeClient.update();
-    printTime(tft, timeClient.getFormattedTime());
+    disp.printTime(timeClient.getFormattedTime());
   }
   return connected;
 }
@@ -243,12 +260,6 @@ void setupPins() {
   pinMode(RELAY_7, OUTPUT);
   digitalWrite(RELAY_7, HIGH);
   pinMode(ENC_BTN,INPUT);
-}
-
-void setupTft() {
-  tft.begin();
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setRotation(1);
 }
 
 float getTemp() {
