@@ -1,7 +1,5 @@
 /* all of the main library references along with config stuff in this .h file */
-#include "doorConfig.h"
-
-
+#include "portalConfig.h"
 
 /* wifi and ntp */
 ESP32Timer ITimer0(0);
@@ -11,41 +9,47 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, ntpPool);
 String prevTime; //clock variable for showing each second
 int32_t utcOffset;
-
-
 /* webserver and spifs stuff */
 AsyncWebServer server(80);
 
-
 /* display and encoder */
-//Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC); //Use hardware SPI and specify the chip selet and data command pins
 DisplayModule disp = DisplayModule(TFT_CS, TFT_DC, -1);
-ESP32Encoder encoder;
-InputDebounce encoder_btn;
-int16_t lastEncoderValue = 0;
-int16_t currentEncoderValue;
-unsigned long encoderWaitBuffer; //after we turn the encoder, pause .25 seconds
-uint8_t CURRENTSCREEN = 0;
-uint8_t PREVIOUS_SCREE = 0;
-unsigned long buttonMillis;
+/* Display variables */
+String temperature = "";
+String dPosition = "Closed";
+String dState = "Idle";
+char nextAction[100] = "Open at dawn";
+String fTime = "Wifi Off";
+String battCharge = "---";
+long lastTempBattCheck = 0;
 
+/* enc */
+InputDebounce encoder_btn;
+bool encBtnPressed = false;
+Encoder enc(ENC_A, ENC_B);
+volatile int16_t lastEncoderValue = 0;
+volatile int16_t newEncoderValue = 0;
+volatile int16_t realEncVal = 0;
+
+
+unsigned long lastEncTurn = 0;
+unsigned long thisEncTurn = 0;
+volatile uint8_t CURRENTSCREEN = -1;
+volatile uint8_t SCREEN = 0;
 
 Preferences prefs;
 timeTrigger schedule;
 
 /*
-   Door Control variables
+   Door Control object
 */
-volatile int doorState = D_CRACKED; //default presumtpin that the door is not actually closed
-volatile int motorState = M_UNKNOWN;
-
+DoorControl door = DoorControl(RELAY_1_2, RELAY_3_4, B_LIM_SW, T_LIM_SW, MOTOR_CURR);
 
 
 void setup() {
+  Serial.begin(115200);
+
   prefs.begin("cdoor", false);
-
-  
-
   // Check to see if we are brand new based on if the offset is actually set. Otherwise, set the offset and continue:
   if ((utcOffset = prefs.getInt(pUtcOffset, 50)) == 50) {
     //seed the offset with 0 and tell everyone else
@@ -58,9 +62,6 @@ void setup() {
   char lastSeen[20];
   strftime(lastSeen, 20, "%Y-%m-%d %H:%M:%S", localtime(&t));
 
-
-  Serial.begin(115200);
-  //delay(1000);
   setupPins();
   disp.startDisp();
   disp.printStartMsg();
@@ -80,54 +81,48 @@ void setup() {
     prefs.putULong("lastBoot", t);
     loadSchedule();
     setupWebServer();
-
   }
-  disp.clearDisp();
-
-  ESP32Encoder::useInternalWeakPullResistors = UP;
-  encoder.attachHalfQuad(ENC_A, ENC_B);
   encoder_btn.registerCallbacks(encPressCallback, encReleaseCallback, NULL, NULL);
   encoder_btn.setup(ENC_BTN, BUTTON_DEBOUNCE_DELAY, InputDebounce::PIM_INT_PULL_UP_RES, 100);
-  
-  //encoder.setCount(0);
+
+  disp.clearDisp();
+  disp.defaultScreen();
 }
 
-void encPressCallback(uint8_t pinIn){
-  Serial.println("enc pressed");
+void checkEncoder()
+{
+  newEncoderValue = enc.read();
+  if (newEncoderValue != lastEncoderValue) {
+    Serial.print("last enc: "); Serial.print(lastEncoderValue); Serial.print(", new enc: "); Serial.println(newEncoderValue);
+    lastEncoderValue = newEncoderValue;
+    realEncVal = lastEncoderValue / 4;
+  }
+  SCREEN = abs(realEncVal % DisplayModule::SCREEN_CNT);
 }
-void encReleaseCallback(uint8_t pinIn){
-  
+void encPressCallback(uint8_t pinIn) {
+
 }
 
+void encReleaseCallback(uint8_t pinIn) {
 
-
-
+}
 
 void loop() {
-
+  /* check the state of the door */
+  webUpdateApi();
+  
   /*
-     General Loop opearation
-     First, check the current sensor
-     Second, check the door state
-     Third, check for any API/UI calls
-     Fourth, check the schedule or, LDR values if we're not in wifi
-     Fifth, check the rotary encoder for menu actions
-     Sixth, update the display
-     Seventh, check for time updates
-     Eight, update temp/battery data
+     Not only do we only need to check the battery and temp infrequently,
+     an AnalogRead right after we start kills the device. Might have somnething to do with
+     the v1.0 power issues of the Thing Plus https://learn.sparkfun.com/tutorials/esp32-thing-plus-hookup-guide
   */
-  // put your main code here, to run repeatedly:
-  //delay(1000);
-  //getTemp();
-  //getLDR();
-  //Serial.print(digitalRead(B_LIM_SW));
-  //Serial.println(digitalRead(T_LIM_SW));
+  if ((millis() - lastTempBattCheck) > TEMP_CYCLE) {
+    battCharge = getBattV();
+    temperature = getTemp();
+    lastTempBattCheck = millis();
+  }
 
-  String dPosition = "Closed";
-  String dState = "Idle";
-  char nextAction[100] = "Open at dawn";
-  String fTime = "Wifi Off";
-  String battCharge = "12.5v (ok)";
+
   if (!LDRMODE) {
     fTime = timeClient.getFormattedTime();
     //if door is open, lookup close time. else, lookup open time:
@@ -135,55 +130,48 @@ void loop() {
   }
 
   //check to see if we switched screens
-  currentEncoderValue = encoder.getCount();
-  if (currentEncoderValue != lastEncoderValue) {
-    Serial.print("NEW ENC VAL: ");
-    Serial.println(currentEncoderValue);
+  checkEncoder();
+  encoder_btn.process(millis());
 
-    if (currentEncoderValue > lastEncoderValue){
-      CURRENTSCREEN++;
-    } else{
-      CURRENTSCREEN--;
-    }
-    lastEncoderValue = currentEncoderValue;
-    //set new display screen
-    
-    disp.setPeepBuffer(CURRENTSCREEN);
+  // print overlay info
+  if (!fTime.equals(prevTime)) {
+    //Serial.println("t print");
+    prevTime = fTime;
+    disp.defaultOverlay(battCharge, fTime, "", "" , "" , temperature);
   }
-  buttonMillis = millis();
-  encoder_btn.process(buttonMillis);
 
-  switch (CURRENTSCREEN) {
-    case DEFAULT_SCREEN:
-      if (!fTime.equals(prevTime)) {
-        prevTime = fTime;
-        disp.defaultScreen(battCharge, dPosition, dState, fTime, nextAction);
+  switch (SCREEN) {
+    case DisplayModule::DEFAULT_SCREEN:
+      if (SCREEN != CURRENTSCREEN) {
+        disp.printPeep(DisplayModule::DEFAULT_SCREEN);
+      }
+
+      CURRENTSCREEN = SCREEN;
+      break;
+    case DisplayModule::DOOR_OPEN_SCREEN:
+      if (SCREEN != CURRENTSCREEN) {
+        disp.printPeep(DisplayModule::DOOR_OPEN_SCREEN);
+        CURRENTSCREEN = DisplayModule::DOOR_OPEN_SCREEN;
       }
       break;
-    case CONTROL_DOOR_SCREEN:
-      disp.printPeep();
+    case DisplayModule::DOOR_CLOSE_SCREEN:
+      if (SCREEN != CURRENTSCREEN) {
+        disp.printPeep(DisplayModule::DOOR_CLOSE_SCREEN);
+        CURRENTSCREEN = DisplayModule::DOOR_CLOSE_SCREEN;
+      }
       break;
-  }
-  /*
-  if (CURRENTSCREEN == DEFAULT_SCREEN) {
-    //only update once per second
-    if (!fTime.equals(prevTime)) {
-      updatDefTime(tft, fTime);
-      prevTime = fTime;
-    }
-  } else if (CURRENTSCREEN < 1)  {
-    CURRENTSCREEN = defaultScreen(tft, battCharge, dPosition, dState, fTime, nextAction);
-  }
-  */
+    default:
+      break;
 
-  doorStateUpdate();
-
+  }
+  delay(300);
 }
 
 volatile boolean stopWifiConn = false;
 void IRAM_ATTR wifiSetupTimerHandler0(void)
 {
   stopWifiConn = true;
+  //return true;
 }
 
 boolean setupWifi() {
@@ -219,7 +207,7 @@ boolean setupWifi() {
       connected = false;
     } else {
       sprintf(wifiMsgs, "\nWifi Connected\nIP Address:%s", WiFi.localIP().toString().c_str());
-      disp.printTft(wifiMsgs, -1, 0, ILI9341_GREEN, 2, true);
+      disp.printTft(wifiMsgs, -1, 0, ILI9341_GREEN, ILI9341_BLACK, 2, true);
       connected =  true;
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
@@ -246,7 +234,7 @@ void setupPins() {
   pinMode(B_LIM_SW, INPUT_PULLUP);
   pinMode(T_LIM_SW, INPUT_PULLUP);
   pinMode(TEMP, INPUT);
-  pinMode(BATT12V, INPUT);
+  //pinMode(BATT12V, INPUT);
   pinMode(MOTOR_CURR, INPUT);
   pinMode(LDR, INPUT);
   pinMode(RELAY_1_2, OUTPUT);
@@ -259,19 +247,32 @@ void setupPins() {
   digitalWrite(RELAY_6, HIGH);
   pinMode(RELAY_7, OUTPUT);
   digitalWrite(RELAY_7, HIGH);
-  pinMode(ENC_BTN,INPUT);
+  pinMode(ENC_BTN, INPUT);
 }
 
-float getTemp() {
+String getTemp() {
   float aVal = analogRead(TEMP) / 1023.0;
   float tmpC = (aVal - 0.5) * 100;
   float tmpF = (tmpC * 1.8) + 32;
-
-  Serial.print("temp c:");
-  Serial.print(tmpC);
-  Serial.print(", tmp f:");
-  Serial.println(tmpF);
-  return tmpC;
+  return String(tmpF) + "F";
+}
+/**
+   With voltage divider
+   Bat -> 55k -> pin -> 15K -> ground
+   15v should drop down to 3.2v though the divier.
+   12v batteries should not go above 14.4 volts
+   measurements:
+   5.4v ~ 1255
+   10v ~ 2450 (/245 for scale)
+   12v ~ 2960
+   15v ~ 4095
+   ESP32 ADC graph for reference https://randomnerdtutorials.com/esp32-adc-analog-read-arduino-ide/
+*/
+String getBattV() {
+  char t[5];
+  float aVal = analogRead(A3) / 245.0;
+  dtostrf(aVal, 3, 1, t);
+  return String(t) + "v";
 }
 
 float getLDR() {
@@ -334,67 +335,22 @@ void updateSchedule(int h, int m, int SCH) {
    controls on the door itself.
 */
 void stopMotorApi() {
-  digitalWrite(RELAY_1_2, HIGH);
-  digitalWrite(RELAY_3_4, HIGH);
 }
 void closeDoorApi() {
-  doorStateUpdate();
-  if (doorState == D_CLOSED) {
-    return;
-  }
-  digitalWrite(RELAY_1_2, LOW);
-  digitalWrite(RELAY_3_4, HIGH);
 }
 void openDoorApi() {
-  doorStateUpdate();
-  if (doorState == D_OPENED) {
-    return;
-  }
-  digitalWrite(RELAY_1_2, HIGH);
-  digitalWrite(RELAY_3_4, LOW);
 }
 
-void doorStateUpdate() {
-
-  //first check the fault state if both switches are closed/disconnected
-  if ( !(digitalRead(B_LIM_SW) && digitalRead(T_LIM_SW)) ) {
-    stopMotorApi();
-    Serial.println("FAULT. BOTH LIMIT SWITCHES ARE \"PRESSED\"");
-    return;
+void webUpdateApi() {
+  door.doorStateUpdate();
+  switch (door.getDoorState()) {
+    case DoorControl::DSTATE_OPENED:
+      break;
+    case DoorControl::DSTATE_CLOSED:
+      break;
   }
-  //next, check the motor state
-  if ( digitalRead(RELAY_1_2) == LOW && digitalRead(RELAY_3_4) == HIGH) {
-    motorState = M_OPENING;
-  } else if (digitalRead(RELAY_1_2) == HIGH && digitalRead(RELAY_3_4) == LOW) {
-    motorState = M_CLOSING;
-  } else if (digitalRead(RELAY_1_2) == LOW && digitalRead(RELAY_3_4) == LOW) {
-    Serial.println("FAULT. DEAD SHORT ON BATTERY. CHECK LOG AND FUSE");
-    stopMotorApi();
-    motorState = M_UNKNOWN;
-    return;
-  } else {
-    motorState = M_STOPPED;
-  }
-
-  //if the motor is running, we will check the limits
-  if (motorState == M_OPENING && digitalRead(T_LIM_SW) == S_SELECTED) {
-    //stop the motor
-    stopMotorApi();
-  } else if (motorState == M_CLOSING && digitalRead(B_LIM_SW) == S_SELECTED) {
-    stopMotorApi();
-  }
-
-  if (digitalRead(T_LIM_SW) == S_SELECTED && digitalRead(B_LIM_SW) == S_UNSELECTED) {
-    doorState = D_OPENED;
-  } else if (digitalRead(T_LIM_SW) == S_UNSELECTED && digitalRead(B_LIM_SW) == S_SELECTED) {
-    doorState = D_CLOSED;
-  } else {
-    //anyting that's not fully open is "cracked"
-    doorState = D_CRACKED;
-  }
-
-  doorState = D_OPENED; //debug
 }
+
 
 
 String processor(const String& var) {
@@ -420,11 +376,11 @@ String processor(const String& var) {
     return String(closeTime);
   }
   if (var == "STATE") {
-    doorStateUpdate();
-    switch (doorState) {
-      case D_OPENED:
+    webUpdateApi();
+    switch (door.getDoorState()) {
+      case DoorControl::DSTATE_OPENED:
         return "Opened";
-      case D_CLOSED:
+      case DoorControl::DSTATE_CLOSED:
         return "Closed";
       default:
         return "UNKNOWN";

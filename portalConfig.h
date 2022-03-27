@@ -3,7 +3,7 @@
  *
 */
 #include "DisplayModule.h"
-#include <ESP32Encoder.h>
+#include "DoorControl.h"
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
@@ -11,10 +11,7 @@
 #include <ESPAsyncWebServer.h>
 #include <SPIFFS.h>
 #include <InputDebounce.h>
-
-
-
-
+#include <Encoder.h>
 
 
 #define TIMER_INTERRUPT_DEBUG       1
@@ -26,6 +23,8 @@
 #define ENCODER_STEPS_PER_NOTCH     1
 #define BUTTON_DEBOUNCE_DELAY       20 /* delay for debouncing encoder push */
 #define SECONDS_PER_HOUR            3600
+//#define TEMP_CYCLE                  300000 /*check ever 5 min*/
+#define TEMP_CYCLE                  10000 
 /*
  * Preferences keys and constants
  */
@@ -39,20 +38,9 @@ const char* ntpPool = "pool.ntp.org";
    door/motor states
 */
 #define D_CLOSED      0
-#define M_CLOSING     1
 #define D_OPENED      2
-#define M_OPENING     3
-#define M_STOPPED     4
-#define D_TRANSITION  5
 #define D_CRACKED     6
 #define M_UNKNOWN     7
-
-/**
- * Switch flags
- * 
- */
-#define S_SELECTED    HIGH
-#define S_UNSELECTED  LOW
 
 /*
  * These pins are the default for the Thing Plus PCB layout.
@@ -107,4 +95,6 @@ typedef struct
 } timeTrigger;
 #define OSCH 1
 #define CSCH 2
+
+
  

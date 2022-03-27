@@ -4,16 +4,9 @@
 #ifndef DisplayModule_h
 #define DisplayModule_h
 
-#include "Arduino.h"
+//#include "Arduino.h"
 #include <Adafruit_ILI9341.h>
 #include <Adafruit_GFX.h>
-
-/*
- * TFT Screens 
- */
-#define DEFAULT_SCREEN 0
-#define CONTROL_DOOR_SCREEN 1
-#define WIFI_UPDATE_SCREEN 2
 
 class DisplayModule
 {
@@ -26,14 +19,20 @@ class DisplayModule
     void printWifiStart();
     void printWifiFail();
     void printLdrMode();
-    void printTft(String msg, int x, int y, int color, int size, bool newline);
+    void printTft(String msg, int x, int y, int fgColor, int bgColor, int size, bool newline);
     void printTime(String fTime);
     void printTftSimple(String  msg, bool newline);
-    int defaultScreen( String bChg, String dPos, String dState, String fTime, String nextAction);
+    int defaultScreen();
     void updatDefTime(String fTime);
-    void printPeep();
+    void printPeep(int p);
     void setPeepBuffer(int i);
     void startDisp();
+    void defaultOverlay(String charge, String fTime, String pos, String state, String sch, String tmp);
+    void showOpen();
+    const static int DEFAULT_SCREEN = 0;
+    const static int DOOR_OPEN_SCREEN = 1;
+    const static int DOOR_CLOSE_SCREEN = 2;
+    const static int SCREEN_CNT = 3;
   private:
     Adafruit_ILI9341 tft;
     int peepBufferIndex;
@@ -43,6 +42,9 @@ class DisplayModule
     const String wifiConnError = "Could not connect to wifi!";
     const String wifiConnSuccess = "Connected to wifi";
     const String ldrMode = "Running on Light Sense";
+    const String sClose = "CLOSE?";
+    const String sOpen = "OPEN?";
+    const String tempRow = "Temperature:";
 };
 
 #endif
